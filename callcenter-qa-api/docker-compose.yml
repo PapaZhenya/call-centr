@@ -1,0 +1,100 @@
+name: callcenter-qa-api
+
+# Two ways to run the local LLM:
+#   1. Ollama installed natively on Windows (recommended - simplest GPU access).
+#      LOCAL_LLM_BASE_URL=http://host.docker.internal:11434 in .env (already the
+#      default in .env.example). `docker compose up` does not start Ollama for you;
+#      install/run it yourself per the README.
+#   2. Ollama inside Docker too - uncomment the `ollama` service below and set
+#      LOCAL_LLM_BASE_URL=http://ollama:11434 in .env instead. GPU passthrough
+#      into Docker on Windows is more involved (WSL2 + NVIDIA container toolkit);
+#      CPU-only works out of the box but is slow for anything but small models.
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: callcenter_qa
+      POSTGRES_USER: callcenter
+      POSTGRES_PASSWORD: callcenter
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U callcenter -d callcenter_qa"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+
+  api:
+    build: .
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      - .:/app
+      - audio_storage:/data/audio
+      - whisper_models:/root/.cache/huggingface
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  worker:
+    build: .
+    command: arq app.workers.worker_settings.WorkerSettings
+    volumes:
+      - .:/app
+      - audio_storage:/data/audio
+      - whisper_models:/root/.cache/huggingface
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  frontend:
+    build:
+      context: ../callcenter-qa-frontend
+      # NEXT_PUBLIC_* vars are inlined into the client bundle at build time,
+      # not read at container startup - must be passed as a build arg.
+      args:
+        NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+
+  metabase:
+    image: metabase/metabase:latest
+    ports:
+      - "3001:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # Uncomment to run Ollama inside Docker instead of natively on Windows.
+  # Also set LOCAL_LLM_BASE_URL=http://ollama:11434 in .env.
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   ports:
+  #     - "11434:11434"
+  #   volumes:
+  #     - ollama_models:/root/.ollama
+
+volumes:
+  pgdata:
+  audio_storage:
+  whisper_models:
+  # ollama_models:
