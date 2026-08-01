@@ -200,6 +200,7 @@ async def test_evaluate_call_insufficient_transcript_skips_llm_and_scores_minimu
         evaluation = await evaluate_call(db, call, "You", segments=[])
 
     provider.generate_json.assert_not_called()  # silence never reaches the model
+    assert evaluation.status == STATUS_COMPLETED  # in_progress only while computing
     assert "insufficient_transcript" in evaluation.flags
     assert evaluation.overall_score == 1.0  # every criterion at minimum
 

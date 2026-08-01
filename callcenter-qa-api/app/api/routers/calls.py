@@ -19,7 +19,7 @@ from app.models.call import (
     STATUS_TRANSCRIPTION_FAILED,
     Call,
 )
-from app.models.qa_evaluation import QAEvaluation, QAEvaluationScore
+from app.models.qa_evaluation import STATUS_IN_PROGRESS, QAEvaluation, QAEvaluationScore
 from app.models.transcript import Transcript
 from app.models.user import User
 from app.schemas.call import CallRead, TranscriptRead
@@ -118,7 +118,12 @@ async def get_call_qa(
 
     stmt = (
         select(QAEvaluation)
-        .where(QAEvaluation.call_id == call_id)
+        .where(
+            QAEvaluation.call_id == call_id,
+            # A recompute creates its row before filling it in - an in_progress
+            # evaluation must never be served as if it were the result.
+            QAEvaluation.status != STATUS_IN_PROGRESS,
+        )
         .options(selectinload(QAEvaluation.scores).selectinload(QAEvaluationScore.rubric_criterion))
         .order_by(QAEvaluation.created_at.desc())
     )

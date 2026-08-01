@@ -10,6 +10,7 @@ from app.models.qa_evaluation import (
     SOURCE_RULE,
     STATUS_COMPLETED,
     STATUS_FAILED,
+    STATUS_IN_PROGRESS,
     QAEvaluation,
     QAEvaluationScore,
 )
@@ -69,10 +70,13 @@ async def evaluate_call(
     rule_criteria = [c for c in all_criteria if c.is_rule_based]
     llm_criteria = llm_scored_criteria(all_criteria)
 
+    # Created in_progress and flipped to completed at the very end, so a
+    # concurrent /qa read never mistakes a half-built evaluation (committed
+    # rule scores, no overall yet) for a finished one.
     evaluation = QAEvaluation(
         call_id=call.id,
         rubric_version_id=rubric_version.id,
-        status=STATUS_COMPLETED,
+        status=STATUS_IN_PROGRESS,
         flags=[],
     )
     db.add(evaluation)
@@ -174,6 +178,7 @@ async def evaluate_call(
     evaluation.overall_score = compute_weighted_overall(entries)
     evaluation.notes = notes
     evaluation.flags = flags
+    evaluation.status = STATUS_COMPLETED
 
     await db.commit()
     await db.refresh(evaluation)
