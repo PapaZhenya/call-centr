@@ -46,6 +46,7 @@ export const ru = {
     title: "Звонки",
     upload: "Загрузить звонок",
     uploadFile: "Аудиофайл",
+    exportCsv: "Экспорт CSV",
     uploadAgent: "Агент",
     uploadDate: "Дата звонка",
     uploadDirection: "Направление",

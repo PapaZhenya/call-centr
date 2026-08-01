@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState, type FormEvent } from "react";
 import { AppShell } from "@/components/app-shell";
-import { ApiError, api } from "@/lib/api-client";
+import { API_BASE_URL, ApiError, api, getAccessToken } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 import { statusBadgeClass } from "@/lib/format";
 import { CALLS_RETRY, CALLS_UPLOAD, hasPermission } from "@/lib/permissions";
@@ -84,6 +84,26 @@ export default function CallsPage() {
     }
   }
 
+  async function handleExport() {
+    setError(null);
+    try {
+      const token = getAccessToken();
+      const response = await fetch(`${API_BASE_URL}/api/v1/reports/calls.csv`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!response.ok) throw new ApiError(response.status, ru.common.error);
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `calls-report-${new Date().toISOString().slice(0, 10)}.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : ru.common.error);
+    }
+  }
+
   async function handleRetry(callId: string) {
     try {
       await api.post(`/api/v1/calls/${callId}/retry`);
@@ -98,7 +118,12 @@ export default function CallsPage() {
   return (
     <AppShell>
       <div className="stack">
-        <h1>{ru.calls.title}</h1>
+        <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+          <h1 style={{ margin: 0 }}>{ru.calls.title}</h1>
+          <button type="button" className="secondary" onClick={() => void handleExport()}>
+            {ru.calls.exportCsv}
+          </button>
+        </div>
 
         {canUpload && (
         <form className="card stack" onSubmit={handleUpload}>

@@ -10,6 +10,7 @@ from app.api.routers import teams as teams_router
 from app.api.routers import users as users_router
 from app.config import settings
 from app.ingestion import router as ingestion_router
+from app.reports import router as reports_router
 
 app = FastAPI(title="Call Center QA Platform")
 
@@ -27,6 +28,7 @@ app.include_router(calls_router.router)
 app.include_router(agents_router.router)
 app.include_router(rubrics_router.router)
 app.include_router(analytics_router.router)
+app.include_router(reports_router.router)
 app.include_router(teams_router.router)
 app.include_router(users_router.router)
 
