@@ -1,6 +1,7 @@
 import uuid
+from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class RubricCriterionSummary(BaseModel):
@@ -28,6 +29,15 @@ class QAEvaluationScoreRead(BaseModel):
     evidence_start: float | None
     evidence_end: float | None
     evidence_speaker: str | None
+    manual_score: float | None
+    manual_comment: str | None
+    corrected_at: datetime | None
+
+
+class ScoreCorrectionInput(BaseModel):
+    # None clears the correction and reverts to the model's score.
+    manual_score: float | None = Field(default=None, ge=0, le=10)
+    comment: str | None = None
 
 
 class QAEvaluationRead(BaseModel):

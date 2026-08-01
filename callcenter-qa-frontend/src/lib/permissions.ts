@@ -9,6 +9,7 @@ export const TEAMS_MANAGE = "teams:manage";
 export const USERS_MANAGE = "users:manage";
 export const CALLS_UPLOAD = "calls:upload";
 export const CALLS_RETRY = "calls:retry";
+export const QA_CORRECT = "qa:correct";
 export const CALLS_VIEW_ALL = "calls:view:all";
 export const CALLS_VIEW_TEAM = "calls:view:team";
 export const CALLS_VIEW_OWN = "calls:view:own";
@@ -22,6 +23,7 @@ export type Permission =
   | typeof USERS_MANAGE
   | typeof CALLS_UPLOAD
   | typeof CALLS_RETRY
+  | typeof QA_CORRECT
   | typeof CALLS_VIEW_ALL
   | typeof CALLS_VIEW_TEAM
   | typeof CALLS_VIEW_OWN
@@ -38,6 +40,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     USERS_MANAGE,
     CALLS_UPLOAD,
     CALLS_RETRY,
+    QA_CORRECT,
     CALLS_VIEW_ALL,
     ANALYTICS_VIEW_ALL,
   ],
@@ -48,12 +51,21 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     USERS_MANAGE,
     CALLS_UPLOAD,
     CALLS_RETRY,
+    QA_CORRECT,
     CALLS_VIEW_ALL,
     ANALYTICS_VIEW_ALL,
   ],
-  qa_manager: [RUBRIC_WRITE, RUBRIC_READ, CALLS_UPLOAD, CALLS_RETRY, CALLS_VIEW_ALL, ANALYTICS_VIEW_ALL],
-  team_lead: [...BASE_READ, CALLS_UPLOAD, CALLS_RETRY, CALLS_VIEW_TEAM, ANALYTICS_VIEW_TEAM],
-  reviewer: [...BASE_READ, CALLS_VIEW_ALL],
+  qa_manager: [
+    RUBRIC_WRITE,
+    RUBRIC_READ,
+    CALLS_UPLOAD,
+    CALLS_RETRY,
+    QA_CORRECT,
+    CALLS_VIEW_ALL,
+    ANALYTICS_VIEW_ALL,
+  ],
+  team_lead: [...BASE_READ, CALLS_UPLOAD, CALLS_RETRY, QA_CORRECT, CALLS_VIEW_TEAM, ANALYTICS_VIEW_TEAM],
+  reviewer: [...BASE_READ, QA_CORRECT, CALLS_VIEW_ALL],
   agent: [CALLS_VIEW_OWN],
   viewer: [...BASE_READ, CALLS_VIEW_ALL, ANALYTICS_VIEW_ALL],
 };

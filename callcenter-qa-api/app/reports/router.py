@@ -77,7 +77,7 @@ async def export_calls_csv(
         if evaluation is not None:
             for score in evaluation.scores:
                 criterion = score.rubric_criterion
-                criterion_scores[criterion.key] = (criterion.label, float(score.score))
+                criterion_scores[criterion.key] = (criterion.label, score.effective_score)
         rows.append(
             ReportRow(
                 call_date=call.call_date,

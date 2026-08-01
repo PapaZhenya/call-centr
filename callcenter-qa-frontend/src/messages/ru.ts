@@ -84,6 +84,11 @@ export const ru = {
     speakerUnknown: "Неизвестно",
     speakerN: "Спикер {n}",
     swapSpeakers: "Поменять спикеров местами",
+    correctScore: "Исправить оценку",
+    correctedScore: "Исправлено",
+    modelScore: "модель",
+    correctionComment: "Комментарий (почему исправили)",
+    clearCorrection: "Вернуть оценку модели",
   },
   rubric: {
     title: "Чек-лист оценки",

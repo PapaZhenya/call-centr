@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 
 from sqlalchemy import Boolean, ForeignKey, Numeric, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -67,6 +68,21 @@ class QAEvaluationScore(Base, IdMixin):
     evidence_start: Mapped[float | None] = mapped_column(Numeric(10, 2), default=None)
     evidence_end: Mapped[float | None] = mapped_column(Numeric(10, 2), default=None)
     evidence_speaker: Mapped[str | None] = mapped_column(default=None)
+
+    # Human correction. The model's score above is never overwritten - the
+    # (score, manual_score) pair is the future fine-tuning dataset. When
+    # manual_score is set, it is the effective score everywhere (overall,
+    # analytics, CSV export); clearing it reverts to the model's number.
+    manual_score: Mapped[float | None] = mapped_column(Numeric(5, 2), default=None)
+    manual_comment: Mapped[str | None] = mapped_column(Text, default=None)
+    corrected_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), default=None
+    )
+    corrected_at: Mapped[datetime | None] = mapped_column(default=None)
+
+    @property
+    def effective_score(self) -> float:
+        return float(self.manual_score if self.manual_score is not None else self.score)
 
     qa_evaluation: Mapped["QAEvaluation"] = relationship(back_populates="scores")
     rubric_criterion: Mapped["RubricCriterion"] = relationship()  # noqa: F821

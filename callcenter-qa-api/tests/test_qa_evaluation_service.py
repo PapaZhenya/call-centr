@@ -6,7 +6,7 @@ import pytest
 
 from app.llm.base import LLMResult
 from app.models.qa_evaluation import SOURCE_LOCAL_LLM, STATUS_COMPLETED
-from app.qa_evaluation.service import evaluate_call
+from app.qa_evaluation.service import apply_manual_correction, evaluate_call
 
 # Long enough to clear settings.qa_min_transcript_words - shorter transcripts
 # skip the LLM entirely (see the insufficient-transcript tests below).
@@ -274,6 +274,87 @@ async def test_evaluate_call_insufficient_transcript_still_runs_rule_criteria():
     added = [c.args[0] for c in db.add.call_args_list if type(c.args[0]).__name__ == "QAEvaluationScore"]
     assert len(added) == 2
     assert "insufficient_transcript" in evaluation.flags
+
+
+class _FakeScore:
+    """Mimics QAEvaluationScore closely enough for apply_manual_correction:
+    plain attributes plus the effective_score property."""
+
+    def __init__(self, score, criterion):
+        self.score = score
+        self.rubric_criterion = criterion
+        self.manual_score = None
+        self.manual_comment = None
+        self.corrected_by_user_id = None
+        self.corrected_at = None
+
+    @property
+    def effective_score(self):
+        return float(self.manual_score if self.manual_score is not None else self.score)
+
+
+@pytest.mark.asyncio
+async def test_manual_correction_overrides_and_recomputes_overall():
+    criterion = _criterion("politeness", "Politeness")
+    score_row = _FakeScore(5.0, criterion)
+    evaluation = SimpleNamespace(scores=[score_row], flags=[], overall_score=5.0)
+    db = AsyncMock()
+    reviewer_id = uuid.uuid4()
+
+    await apply_manual_correction(db, evaluation, score_row, 2.0, "too generous", reviewer_id)
+
+    assert score_row.manual_score == 2.0
+    assert score_row.score == 5.0  # model's number preserved
+    assert score_row.manual_comment == "too generous"
+    assert score_row.corrected_by_user_id == reviewer_id
+    assert score_row.corrected_at is not None
+    # (2-1)/(5-1) = 0.25 -> 1 + 0.25*4 = 2.0
+    assert evaluation.overall_score == 2.0
+    db.commit.assert_awaited()
+
+
+@pytest.mark.asyncio
+async def test_manual_correction_clear_reverts_to_model_score():
+    criterion = _criterion("politeness", "Politeness")
+    score_row = _FakeScore(4.0, criterion)
+    evaluation = SimpleNamespace(scores=[score_row], flags=[], overall_score=None)
+    db = AsyncMock()
+
+    await apply_manual_correction(db, evaluation, score_row, 1.0, None, uuid.uuid4())
+    assert evaluation.overall_score == 1.0
+
+    await apply_manual_correction(db, evaluation, score_row, None, None, uuid.uuid4())
+
+    assert score_row.manual_score is None
+    assert score_row.corrected_at is None
+    assert evaluation.overall_score == 4.0  # back to the model's value
+
+
+@pytest.mark.asyncio
+async def test_manual_correction_on_critical_criterion_updates_flag():
+    critical = _criterion("no_card_request", "No card request", is_critical=True)
+    score_row = _FakeScore(5.0, critical)
+    evaluation = SimpleNamespace(scores=[score_row], flags=["model_flag"], overall_score=5.0)
+    db = AsyncMock()
+
+    await apply_manual_correction(db, evaluation, score_row, 1.0, None, uuid.uuid4())
+    assert "critical_violation" in evaluation.flags
+    assert "model_flag" in evaluation.flags  # other flags untouched
+
+    await apply_manual_correction(db, evaluation, score_row, None, None, uuid.uuid4())
+    assert "critical_violation" not in evaluation.flags
+
+
+@pytest.mark.asyncio
+async def test_manual_correction_clamps_to_criterion_scale():
+    criterion = _criterion("politeness", "Politeness", max_score=5)
+    score_row = _FakeScore(3.0, criterion)
+    evaluation = SimpleNamespace(scores=[score_row], flags=[], overall_score=None)
+    db = AsyncMock()
+
+    await apply_manual_correction(db, evaluation, score_row, 99.0, None, uuid.uuid4())
+
+    assert score_row.manual_score == 5.0
 
 
 @pytest.mark.asyncio

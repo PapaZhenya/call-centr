@@ -112,6 +112,9 @@ export interface QAEvaluationScore {
   evidence_start: number | null;
   evidence_end: number | null;
   evidence_speaker: string | null;
+  manual_score: number | null;
+  manual_comment: string | null;
+  corrected_at: string | null;
 }
 
 export interface QAEvaluation {

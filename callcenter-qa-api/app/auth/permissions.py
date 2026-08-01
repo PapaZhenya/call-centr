@@ -23,6 +23,7 @@ TEAMS_MANAGE = "teams:manage"
 USERS_MANAGE = "users:manage"
 CALLS_UPLOAD = "calls:upload"
 CALLS_RETRY = "calls:retry"
+QA_CORRECT = "qa:correct"
 CALLS_VIEW_ALL = "calls:view:all"
 CALLS_VIEW_TEAM = "calls:view:team"
 CALLS_VIEW_OWN = "calls:view:own"
@@ -40,6 +41,7 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
             USERS_MANAGE,
             CALLS_UPLOAD,
             CALLS_RETRY,
+            QA_CORRECT,
             CALLS_VIEW_ALL,
             ANALYTICS_VIEW_ALL,
         }
@@ -52,17 +54,26 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
             USERS_MANAGE,
             CALLS_UPLOAD,
             CALLS_RETRY,
+            QA_CORRECT,
             CALLS_VIEW_ALL,
             ANALYTICS_VIEW_ALL,
         }
     ),
     ROLE_QA_MANAGER: frozenset(
-        {RUBRIC_WRITE, RUBRIC_READ, CALLS_UPLOAD, CALLS_RETRY, CALLS_VIEW_ALL, ANALYTICS_VIEW_ALL}
+        {
+            RUBRIC_WRITE,
+            RUBRIC_READ,
+            CALLS_UPLOAD,
+            CALLS_RETRY,
+            QA_CORRECT,
+            CALLS_VIEW_ALL,
+            ANALYTICS_VIEW_ALL,
+        }
     ),
     ROLE_TEAM_LEAD: frozenset(
-        _BASE_READ | {CALLS_UPLOAD, CALLS_RETRY, CALLS_VIEW_TEAM, ANALYTICS_VIEW_TEAM}
+        _BASE_READ | {CALLS_UPLOAD, CALLS_RETRY, QA_CORRECT, CALLS_VIEW_TEAM, ANALYTICS_VIEW_TEAM}
     ),
-    ROLE_REVIEWER: frozenset(_BASE_READ | {CALLS_VIEW_ALL}),
+    ROLE_REVIEWER: frozenset(_BASE_READ | {QA_CORRECT, CALLS_VIEW_ALL}),
     ROLE_AGENT: frozenset({CALLS_VIEW_OWN}),
     ROLE_VIEWER: frozenset(_BASE_READ | {CALLS_VIEW_ALL, ANALYTICS_VIEW_ALL}),
 }

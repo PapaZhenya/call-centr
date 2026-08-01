@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_current_user, get_storage, require_permission
-from app.auth.permissions import CALLS_RETRY
+from app.auth.permissions import CALLS_RETRY, QA_CORRECT
 from app.auth.scoping import ScopeDenied, check_call_visible, scope_calls_query
 from app.database import get_db
 from app.ingestion.storage import StorageBackend
@@ -22,8 +22,9 @@ from app.models.call import (
 from app.models.qa_evaluation import STATUS_IN_PROGRESS, QAEvaluation, QAEvaluationScore
 from app.models.transcript import Transcript
 from app.models.user import User
+from app.qa_evaluation.service import apply_manual_correction
 from app.schemas.call import CallRead, TranscriptRead
-from app.schemas.qa_evaluation import QAEvaluationRead
+from app.schemas.qa_evaluation import QAEvaluationRead, ScoreCorrectionInput
 from app.workers.queue import get_arq_pool
 
 router = APIRouter(prefix="/api/v1/calls", tags=["calls"], dependencies=[Depends(get_current_user)])
@@ -131,6 +132,49 @@ async def get_call_qa(
     evaluation = result.scalars().first()
     if evaluation is None:
         raise HTTPException(status_code=404, detail="QA evaluation not found")
+    return evaluation
+
+
+@router.patch(
+    "/{call_id}/qa/scores/{criterion_id}",
+    response_model=QAEvaluationRead,
+    dependencies=[Depends(require_permission(QA_CORRECT))],
+)
+async def correct_qa_score(
+    call_id: uuid.UUID,
+    criterion_id: uuid.UUID,
+    data: ScoreCorrectionInput,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Human override of one criterion score on the call's latest finished
+    evaluation. manual_score=null clears the correction. The model's own
+    score is preserved alongside - see QAEvaluationScore.manual_score."""
+    await _get_visible_call(call_id, db, user)
+
+    stmt = (
+        select(QAEvaluation)
+        .where(QAEvaluation.call_id == call_id, QAEvaluation.status != STATUS_IN_PROGRESS)
+        .options(selectinload(QAEvaluation.scores).selectinload(QAEvaluationScore.rubric_criterion))
+        .order_by(QAEvaluation.created_at.desc())
+    )
+    evaluation = (await db.execute(stmt)).scalars().first()
+    if evaluation is None:
+        raise HTTPException(status_code=404, detail="QA evaluation not found")
+
+    score_row = next(
+        (s for s in evaluation.scores if s.rubric_criterion_id == criterion_id), None
+    )
+    if score_row is None:
+        raise HTTPException(status_code=404, detail="Score for this criterion not found")
+
+    await apply_manual_correction(
+        db, evaluation, score_row, data.manual_score, data.comment, user.id
+    )
+    # Re-fetch with eager loading rather than refresh(): refresh expires the
+    # scores relationship and serialization would lazy-load outside the
+    # async context (MissingGreenlet).
+    evaluation = (await db.execute(stmt)).scalars().first()
     return evaluation
 
 

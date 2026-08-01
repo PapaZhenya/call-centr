@@ -6,7 +6,7 @@ import { AppShell } from "@/components/app-shell";
 import { API_BASE_URL, ApiError, api, getAccessToken } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 import { speakerLabel } from "@/lib/format";
-import { CALLS_RETRY, hasPermission } from "@/lib/permissions";
+import { CALLS_RETRY, QA_CORRECT, hasPermission } from "@/lib/permissions";
 import type { Call, QAEvaluation, Transcript } from "@/lib/types";
 import { ru } from "@/messages/ru";
 
@@ -26,6 +26,13 @@ export function CallDetailClient({ callId }: { callId: string }) {
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
+
+  // Score-correction editor: one criterion at a time.
+  const [correctingId, setCorrectingId] = useState<string | null>(null);
+  const [correctionScore, setCorrectionScore] = useState("");
+  const [correctionComment, setCorrectionComment] = useState("");
+  const [isSavingCorrection, setIsSavingCorrection] = useState(false);
+  const canCorrect = hasPermission(user, QA_CORRECT);
 
   useEffect(() => {
     let cancelled = false;
@@ -78,6 +85,28 @@ export function CallDetailClient({ callId }: { callId: string }) {
     if (audioRef.current) {
       audioRef.current.currentTime = seconds;
       void audioRef.current.play();
+    }
+  }
+
+  async function handleSaveCorrection(criterionId: string, manualScore: number | null) {
+    setIsSavingCorrection(true);
+    setError(null);
+    try {
+      const updated = await api.patch<QAEvaluation>(
+        `/api/v1/calls/${callId}/qa/scores/${criterionId}`,
+        {
+          manual_score: manualScore,
+          comment: manualScore === null ? null : correctionComment || null,
+        },
+      );
+      setEvaluation(updated);
+      setCorrectingId(null);
+      setCorrectionScore("");
+      setCorrectionComment("");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : ru.common.error);
+    } finally {
+      setIsSavingCorrection(false);
     }
   }
 
@@ -184,8 +213,94 @@ export function CallDetailClient({ callId }: { callId: string }) {
                     <div key={score.rubric_criterion_id} className="card" style={{ padding: 12 }}>
                       <div className="row" style={{ justifyContent: "space-between" }}>
                         <strong>{score.rubric_criterion.label}</strong>
-                        <span className="badge">{score.score}</span>
+                        {score.manual_score !== null ? (
+                          <span>
+                            <span className="badge success">{score.manual_score}</span>{" "}
+                            <span className="muted" style={{ textDecoration: "line-through" }}>
+                              {score.score}
+                            </span>
+                          </span>
+                        ) : (
+                          <span className="badge">{score.score}</span>
+                        )}
                       </div>
+                      {score.manual_score !== null && (
+                        <p className="muted" style={{ margin: "4px 0" }}>
+                          {ru.callDetail.correctedScore}
+                          {score.manual_comment ? `: ${score.manual_comment}` : ""}
+                        </p>
+                      )}
+                      {canCorrect && correctingId === score.rubric_criterion_id && (
+                        <div className="stack" style={{ margin: "8px 0" }}>
+                          <div className="row" style={{ gap: 8 }}>
+                            <input
+                              type="number"
+                              min={1}
+                              max={10}
+                              step={0.5}
+                              style={{ width: 80 }}
+                              aria-label={ru.callDetail.correctScore}
+                              value={correctionScore}
+                              onChange={(e) => setCorrectionScore(e.target.value)}
+                            />
+                            <input
+                              placeholder={ru.callDetail.correctionComment}
+                              value={correctionComment}
+                              onChange={(e) => setCorrectionComment(e.target.value)}
+                            />
+                          </div>
+                          <div className="row" style={{ gap: 8 }}>
+                            <button
+                              type="button"
+                              disabled={isSavingCorrection || correctionScore === ""}
+                              onClick={() =>
+                                void handleSaveCorrection(
+                                  score.rubric_criterion_id,
+                                  Number(correctionScore),
+                                )
+                              }
+                            >
+                              {ru.common.save}
+                            </button>
+                            <button
+                              type="button"
+                              className="secondary"
+                              onClick={() => setCorrectingId(null)}
+                            >
+                              {ru.common.cancel}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                      {canCorrect && correctingId !== score.rubric_criterion_id && (
+                        <div className="row" style={{ gap: 8, margin: "4px 0" }}>
+                          <button
+                            type="button"
+                            className="secondary"
+                            style={{ padding: "2px 8px" }}
+                            onClick={() => {
+                              setCorrectingId(score.rubric_criterion_id);
+                              setCorrectionScore(String(score.manual_score ?? score.score));
+                              setCorrectionComment(score.manual_comment ?? "");
+                            }}
+                          >
+                            {ru.callDetail.correctScore}
+                          </button>
+                          {score.manual_score !== null && (
+                            <button
+                              type="button"
+                              className="secondary"
+                              style={{ padding: "2px 8px" }}
+                              disabled={isSavingCorrection}
+                              onClick={() =>
+                                void handleSaveCorrection(score.rubric_criterion_id, null)
+                              }
+                            >
+                              {ru.callDetail.clearCorrection}
+                            </button>
+                          )}
+                        </div>
+                      )}
                       <p className="muted" style={{ margin: "4px 0" }}>
                         {score.source === "rule"
                           ? ru.callDetail.sourceRule

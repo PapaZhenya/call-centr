@@ -24,13 +24,17 @@ async def agent_summary(db: AsyncSession, agent_id: uuid.UUID) -> dict:
     }
 
 
+# Human corrections win over model scores wherever averages are computed.
+_effective_score = func.coalesce(QAEvaluationScore.manual_score, QAEvaluationScore.score)
+
+
 async def agent_score_by_criterion(db: AsyncSession, agent_id: uuid.UUID) -> list[dict]:
     stmt = (
         select(
             RubricCriterion.id,
             RubricCriterion.key,
             RubricCriterion.label,
-            func.avg(QAEvaluationScore.score),
+            func.avg(_effective_score),
             func.count(QAEvaluationScore.id),
         )
         .select_from(QAEvaluationScore)
@@ -81,11 +85,11 @@ async def org_overview(db: AsyncSession, team_id: uuid.UUID | None = None) -> di
         QAEvaluation.status == STATUS_COMPLETED
     )
     criterion_stmt = (
-        select(RubricCriterion.key, RubricCriterion.label, func.avg(QAEvaluationScore.score))
+        select(RubricCriterion.key, RubricCriterion.label, func.avg(_effective_score))
         .select_from(QAEvaluationScore)
         .join(RubricCriterion, RubricCriterion.id == QAEvaluationScore.rubric_criterion_id)
         .group_by(RubricCriterion.key, RubricCriterion.label)
-        .order_by(func.avg(QAEvaluationScore.score))
+        .order_by(func.avg(_effective_score))
     )
 
     if team_id is not None:

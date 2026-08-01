@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -51,6 +52,52 @@ def _build_score(
         evidence_end=segment["end"] if segment else None,
         evidence_speaker=segment.get("speaker") if segment else None,
     )
+
+
+def _recompute_from_effective_scores(evaluation: QAEvaluation) -> None:
+    """Rebuilds overall_score and the critical_violation flag from the
+    evaluation's scores, honoring manual corrections where present."""
+    entries = [
+        ScoreEntry(
+            s.effective_score,
+            float(s.rubric_criterion.weight),
+            s.rubric_criterion.max_score,
+            s.rubric_criterion.is_critical,
+        )
+        for s in evaluation.scores
+    ]
+    evaluation.overall_score = compute_weighted_overall(entries)
+    flags = [f for f in (evaluation.flags or []) if f != "critical_violation"]
+    if has_critical_violation(entries):
+        flags.append("critical_violation")
+    evaluation.flags = flags
+
+
+async def apply_manual_correction(
+    db: AsyncSession,
+    evaluation: QAEvaluation,
+    score_row: QAEvaluationScore,
+    manual_score: float | None,
+    comment: str | None,
+    corrected_by: uuid.UUID,
+) -> None:
+    """Sets (or clears, when manual_score is None) a human correction on one
+    criterion score and recomputes the evaluation's derived values. The
+    model's original score is never touched - the (model, human) pair is the
+    audit trail and future fine-tuning data."""
+    if manual_score is None:
+        score_row.manual_score = None
+        score_row.manual_comment = None
+        score_row.corrected_by_user_id = None
+        score_row.corrected_at = None
+    else:
+        score_row.manual_score = clamp_score(manual_score, score_row.rubric_criterion.max_score)
+        score_row.manual_comment = comment
+        score_row.corrected_by_user_id = corrected_by
+        score_row.corrected_at = datetime.now(timezone.utc)
+
+    _recompute_from_effective_scores(evaluation)
+    await db.commit()
 
 
 async def evaluate_call(
