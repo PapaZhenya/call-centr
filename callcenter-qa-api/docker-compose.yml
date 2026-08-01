@@ -13,6 +13,7 @@ name: callcenter-qa-api
 services:
   db:
     image: postgres:16
+    restart: unless-stopped
     environment:
       POSTGRES_DB: callcenter_qa
       POSTGRES_USER: callcenter
@@ -29,11 +30,13 @@ services:
 
   redis:
     image: redis:7
+    restart: unless-stopped
     ports:
       - "6379:6379"
 
   api:
     build: .
+    restart: unless-stopped
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     volumes:
       - .:/app
@@ -54,6 +57,7 @@ services:
 
   worker:
     build: .
+    restart: unless-stopped
     command: arq app.workers.worker_settings.WorkerSettings
     volumes:
       - .:/app
@@ -71,6 +75,7 @@ services:
         condition: service_started
 
   frontend:
+    restart: unless-stopped
     build:
       context: ../callcenter-qa-frontend
       # NEXT_PUBLIC_* vars are inlined into the client bundle at build time,
@@ -84,6 +89,7 @@ services:
 
   metabase:
     image: metabase/metabase:latest
+    restart: unless-stopped
     ports:
       - "3001:3000"
     depends_on:
