@@ -47,6 +47,12 @@ export default function RubricPage() {
   const [selectedCriteria, setSelectedCriteria] = useState<Record<string, boolean>>({});
   const [versionName, setVersionName] = useState("");
 
+  // Inline phrase editor state for one criterion row at a time.
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editRequired, setEditRequired] = useState("");
+  const [editForbidden, setEditForbidden] = useState("");
+  const [isSavingPhrases, setIsSavingPhrases] = useState(false);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -99,6 +105,31 @@ export default function RubricPage() {
     }
   }
 
+  function startEditPhrases(criterion: RubricCriterion) {
+    setEditingId(criterion.id);
+    setEditRequired(criterion.required_phrases?.join(", ") ?? "");
+    setEditForbidden(criterion.forbidden_phrases?.join(", ") ?? "");
+  }
+
+  async function handleSavePhrases(criterionId: string) {
+    setIsSavingPhrases(true);
+    setError(null);
+    try {
+      // splitPhrases returns null for an empty input - an explicit null in the
+      // PATCH clears the list and turns the criterion back into LLM-scored.
+      await api.patch(`/api/v1/rubric/criteria/${criterionId}`, {
+        required_phrases: splitPhrases(editRequired),
+        forbidden_phrases: splitPhrases(editForbidden),
+      });
+      setEditingId(null);
+      await reloadRubric(setCriteria, setVersions, setError);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : ru.common.error);
+    } finally {
+      setIsSavingPhrases(false);
+    }
+  }
+
   async function handleCreateVersion(event: FormEvent) {
     event.preventDefault();
     const chosen = Object.entries(selectedCriteria)
@@ -148,6 +179,7 @@ export default function RubricPage() {
                 <th>{ru.rubric.isCritical}</th>
                 <th>{ru.rubric.requiredPhrases}</th>
                 <th>{ru.rubric.forbiddenPhrases}</th>
+                {isAdmin && <th />}
               </tr>
             </thead>
             <tbody>
@@ -158,8 +190,58 @@ export default function RubricPage() {
                   <td>{c.category ?? "—"}</td>
                   <td>{c.max_score}</td>
                   <td>{c.is_critical ? "✓" : ""}</td>
-                  <td>{c.required_phrases?.join(", ") ?? "—"}</td>
-                  <td>{c.forbidden_phrases?.join(", ") ?? "—"}</td>
+                  {editingId === c.id ? (
+                    <>
+                      <td>
+                        <input
+                          aria-label={ru.rubric.requiredPhrases}
+                          value={editRequired}
+                          onChange={(e) => setEditRequired(e.target.value)}
+                        />
+                      </td>
+                      <td>
+                        <input
+                          aria-label={ru.rubric.forbiddenPhrases}
+                          value={editForbidden}
+                          onChange={(e) => setEditForbidden(e.target.value)}
+                        />
+                      </td>
+                      <td>
+                        <div className="row" style={{ gap: 6 }}>
+                          <button
+                            type="button"
+                            disabled={isSavingPhrases}
+                            onClick={() => void handleSavePhrases(c.id)}
+                          >
+                            {ru.common.save}
+                          </button>
+                          <button
+                            type="button"
+                            className="secondary"
+                            onClick={() => setEditingId(null)}
+                          >
+                            {ru.common.cancel}
+                          </button>
+                        </div>
+                      </td>
+                    </>
+                  ) : (
+                    <>
+                      <td>{c.required_phrases?.join(", ") ?? "—"}</td>
+                      <td>{c.forbidden_phrases?.join(", ") ?? "—"}</td>
+                      {isAdmin && (
+                        <td>
+                          <button
+                            type="button"
+                            className="secondary"
+                            onClick={() => startEditPhrases(c)}
+                          >
+                            {ru.common.edit}
+                          </button>
+                        </td>
+                      )}
+                    </>
+                  )}
                 </tr>
               ))}
             </tbody>

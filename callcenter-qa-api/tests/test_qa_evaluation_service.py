@@ -124,7 +124,9 @@ async def test_evaluate_call_clamps_out_of_range_scores():
             "overall_score": 4,
             "notes": None,
             "flags": [],
-            "criteria": {"politeness": {"score": 999, "rationale": "r", "quote": ""}},
+            # Verified quote so only clamping is under test (an unverified
+            # quote would additionally cap the score at the midpoint).
+            "criteria": {"politeness": {"score": 999, "rationale": "r", "quote": "thank you for calling"}},
         },
         raw_text="{...}",
         raw_response={},
@@ -146,6 +148,43 @@ async def test_evaluate_call_clamps_out_of_range_scores():
         c.args[0] for c in db.add.call_args_list if type(c.args[0]).__name__ == "QAEvaluationScore"
     )
     assert added_score.score == 5  # clamped to max_score, never trusted at 999
+
+
+@pytest.mark.asyncio
+async def test_evaluate_call_caps_unevidenced_high_scores_at_midpoint():
+    criterion = _criterion("politeness", "Politeness", max_score=5)
+    rubric_version = _rubric_version([criterion])
+    call = SimpleNamespace(id=uuid.uuid4())
+
+    fake_result = LLMResult(
+        parsed={
+            "overall_score": 5,
+            "notes": None,
+            "flags": [],
+            # High score with no quote at all - the prompt forbids this, and
+            # the code must enforce it when the model doesn't comply.
+            "criteria": {"politeness": {"score": 5, "rationale": "r", "quote": ""}},
+        },
+        raw_text="{...}",
+        raw_response={},
+    )
+    provider = AsyncMock()
+    provider.generate_json = AsyncMock(return_value=fake_result)
+    db = _mock_db()
+
+    with (
+        patch(
+            "app.qa_evaluation.service.get_active_version",
+            AsyncMock(return_value=rubric_version),
+        ),
+        patch("app.qa_evaluation.service.get_llm_provider", return_value=provider),
+    ):
+        await evaluate_call(db, call, TRANSCRIPT, segments=[])
+
+    added_score = next(
+        c.args[0] for c in db.add.call_args_list if type(c.args[0]).__name__ == "QAEvaluationScore"
+    )
+    assert added_score.score == 3.0  # (1 + max_score) / 2
 
 
 @pytest.mark.asyncio

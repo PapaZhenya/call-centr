@@ -157,6 +157,7 @@ export const ru = {
     loading: "Загрузка...",
     save: "Сохранить",
     cancel: "Отмена",
+    edit: "Изменить",
     error: "Ошибка",
     back: "Назад",
   },

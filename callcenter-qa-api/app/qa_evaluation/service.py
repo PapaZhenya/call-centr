@@ -157,6 +157,12 @@ async def evaluate_call(
             score = clamp_score(score_data["score"], criterion.max_score)
             quote = (score_data.get("quote") or "").strip()
             quote_verified = bool(quote) and verify_quote(quote, transcript_text)
+            # The prompt demands a verbatim quote for any score above the
+            # scale midpoint; local models don't always comply, so enforce it
+            # here - unevidenced praise is capped, never trusted.
+            midpoint = (1 + criterion.max_score) / 2
+            if not quote_verified and score > midpoint:
+                score = midpoint
             db.add(
                 _build_score(
                     evaluation.id,
