@@ -9,6 +9,7 @@ from faster_whisper import WhisperModel
 
 from app.config import settings
 from app.transcription.base import TranscriptionEngine, TranscriptionResult, TranscriptSegment
+from app.transcription.diarization import SherpaDiarizer, assign_speakers
 
 logger = logging.getLogger(__name__)
 
@@ -36,12 +37,14 @@ class FasterWhisperEngine(TranscriptionEngine):
     """Local ASR via faster-whisper. Stereo WAV recordings (the common case for
     call center audio: agent/customer on separate channels) are transcribed
     per-channel and labeled by channel. Anything else (mono, or non-16-bit PCM,
-    or non-WAV) is transcribed as a single stream with no speaker labels -
-    a documented MVP limitation; real diarization is a future seam
-    (pyannote.audio)."""
+    or non-WAV) is transcribed as a single stream, then labeled speaker_1/
+    speaker_2/... by local sherpa-onnx diarization when its models are
+    downloaded (see app/transcription/diarization.py); without them the
+    segments stay unlabeled."""
 
     def __init__(self) -> None:
         self._model: WhisperModel | None = None
+        self._diarizer = SherpaDiarizer()
 
     def _get_model(self) -> WhisperModel:
         if self._model is None:
@@ -93,6 +96,9 @@ class FasterWhisperEngine(TranscriptionEngine):
                 TranscriptSegment(speaker=None, start=seg.start, end=seg.end, text=seg.text.strip())
                 for seg in raw_segments
             ]
+            turns = self._diarizer.try_diarize(audio_path)
+            if turns:
+                assign_speakers(segments, turns)
 
         full_text = " ".join(s.text for s in segments).strip()
         return TranscriptionResult(

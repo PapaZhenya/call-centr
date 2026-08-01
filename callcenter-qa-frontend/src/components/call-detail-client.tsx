@@ -12,6 +12,7 @@ const SPEAKER_LABELS = {
   agent: ru.callDetail.speakerAgent,
   customer: ru.callDetail.speakerCustomer,
   unknown: ru.callDetail.speakerUnknown,
+  speakerN: ru.callDetail.speakerN,
 };
 
 export function CallDetailClient({ callId }: { callId: string }) {

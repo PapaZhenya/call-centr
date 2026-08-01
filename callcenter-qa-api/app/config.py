@@ -16,6 +16,18 @@ class Settings(BaseSettings):
     whisper_device: str = "auto"
     whisper_compute_type: str = "auto"
 
+    # Speaker diarization for mono/non-WAV recordings (stereo calls are split
+    # by channel instead - see FasterWhisperEngine). Runs locally via
+    # sherpa-onnx; models are downloaded by scripts/download-models.ps1 into
+    # DIARIZATION_MODELS_DIR. If the models are missing, transcription still
+    # works - segments just stay unlabeled. num_speakers=2 fits call center
+    # audio; set -1 to auto-detect (then cluster_threshold matters: lower =
+    # more speakers).
+    diarization_enabled: bool = True
+    diarization_models_dir: str = "./data/diarization"
+    diarization_num_speakers: int = 2
+    diarization_cluster_threshold: float = 0.5
+
     # Local-only LLM for QA evaluation. No cloud AI provider is supported -
     # see app/llm/factory.py. "ollama" is the only implemented provider.
     local_llm_provider: str = "ollama"

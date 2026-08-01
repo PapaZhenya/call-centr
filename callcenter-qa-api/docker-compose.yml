@@ -39,8 +39,11 @@ services:
       - .:/app
       - audio_storage:/data/audio
       - whisper_models:/root/.cache/huggingface
+      - diarization_models:/models/diarization
     env_file:
       - .env
+    environment:
+      DIARIZATION_MODELS_DIR: /models/diarization
     ports:
       - "8000:8000"
     depends_on:
@@ -56,8 +59,11 @@ services:
       - .:/app
       - audio_storage:/data/audio
       - whisper_models:/root/.cache/huggingface
+      - diarization_models:/models/diarization
     env_file:
       - .env
+    environment:
+      DIARIZATION_MODELS_DIR: /models/diarization
     depends_on:
       db:
         condition: service_healthy
@@ -97,4 +103,5 @@ volumes:
   pgdata:
   audio_storage:
   whisper_models:
+  diarization_models:
   # ollama_models:

@@ -90,6 +90,18 @@ try {
     Add-Result "Ollama" "DOWN" "not reachable on http://localhost:11434 - is it installed and running?"
 }
 
+# --- Diarization models ---
+try {
+    $diarOutput = docker compose exec -T api sh -c "ls /models/diarization 2>/dev/null" 2>$null
+    if ($LASTEXITCODE -eq 0 -and $diarOutput -match "segmentation.onnx" -and $diarOutput -match "embedding.onnx") {
+        Add-Result "Diarization models" "OK" ""
+    } else {
+        Add-Result "Diarization models" "MISSING" "mono recordings won't get speaker labels - run download-models.ps1"
+    }
+} catch {
+    Add-Result "Diarization models" "UNKNOWN" "api container not reachable"
+}
+
 # --- Disk space ---
 try {
     $drive = (Get-Item $root).PSDrive.Name

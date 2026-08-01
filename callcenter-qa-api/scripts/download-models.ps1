@@ -86,4 +86,69 @@ if ($whisperModel) {
     }
 }
 
+# --- sherpa-onnx diarization models (speaker labels for mono recordings) ---
+Write-Host "`n-- Diarization models (speaker labels for mono/mp3 recordings) --"
+Write-Host "Stereo WAV calls are labeled by channel and don't need these."
+Write-Host "~90 MB total, downloaded once into the diarization_models volume."
+Write-Host ""
+Write-Host "  1) download"
+Write-Host "  0) skip"
+
+$diarChoice = Read-Host "Choose an option"
+if ($diarChoice -eq "1") {
+    $containers = docker compose ps -q api 2>$null
+    if (-not $containers) {
+        Write-Host "The 'api' container isn't running - start it first with .\scripts\start.ps1" -ForegroundColor Red
+    } else {
+        Write-Host "Downloading segmentation + embedding models into the api container..."
+        $diarScript = @'
+import tarfile
+import urllib.request
+from pathlib import Path
+
+MODELS_DIR = Path("/models/diarization")
+SEGMENTATION_URL = (
+    "https://github.com/k2-fsa/sherpa-onnx/releases/download/"
+    "speaker-segmentation-models/sherpa-onnx-pyannote-segmentation-3-0.tar.bz2"
+)
+EMBEDDING_URL = (
+    "https://github.com/k2-fsa/sherpa-onnx/releases/download/"
+    "speaker-recongition-models/3dspeaker_speech_eres2net_base_sv_zh-cn_3dspeaker_16k.onnx"
+)
+
+MODELS_DIR.mkdir(parents=True, exist_ok=True)
+
+seg_target = MODELS_DIR / "segmentation.onnx"
+if seg_target.exists():
+    print("segmentation.onnx already present - skipping")
+else:
+    archive = MODELS_DIR / "segmentation.tar.bz2"
+    print("downloading", SEGMENTATION_URL)
+    urllib.request.urlretrieve(SEGMENTATION_URL, archive)
+    with tarfile.open(archive, "r:bz2") as tar:
+        member = next(m for m in tar.getmembers() if m.name.endswith("model.onnx"))
+        member.name = seg_target.name
+        tar.extract(member, MODELS_DIR)
+    archive.unlink()
+    print("saved", seg_target)
+
+emb_target = MODELS_DIR / "embedding.onnx"
+if emb_target.exists():
+    print("embedding.onnx already present - skipping")
+else:
+    print("downloading", EMBEDDING_URL)
+    urllib.request.urlretrieve(EMBEDDING_URL, emb_target)
+    print("saved", emb_target)
+'@
+        $diarScript | docker compose exec -T api python -
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "[OK] diarization models ready" -ForegroundColor Green
+        } else {
+            Write-Host "Diarization model download failed - see output above." -ForegroundColor Red
+        }
+    }
+} else {
+    Write-Host "Skipping diarization models."
+}
+
 Write-Host "`nDone."

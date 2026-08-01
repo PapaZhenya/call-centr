@@ -38,15 +38,26 @@ describe("splitPhrases", () => {
 });
 
 describe("speakerLabel", () => {
-  const labels = { agent: "Агент", customer: "Клиент", unknown: "Неизвестно" };
+  const labels = {
+    agent: "Агент",
+    customer: "Клиент",
+    unknown: "Неизвестно",
+    speakerN: "Спикер {n}",
+  };
 
   it("maps known speaker codes to labels", () => {
     expect(speakerLabel("agent", labels)).toBe("Агент");
     expect(speakerLabel("customer", labels)).toBe("Клиент");
   });
 
+  it("maps diarization speaker_N codes to numbered labels", () => {
+    expect(speakerLabel("speaker_1", labels)).toBe("Спикер 1");
+    expect(speakerLabel("speaker_12", labels)).toBe("Спикер 12");
+  });
+
   it("falls back to unknown for null or unrecognized speakers", () => {
     expect(speakerLabel(null, labels)).toBe("Неизвестно");
     expect(speakerLabel("bot", labels)).toBe("Неизвестно");
+    expect(speakerLabel("speaker_", labels)).toBe("Неизвестно");
   });
 });
