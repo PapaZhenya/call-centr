@@ -54,6 +54,35 @@ def assign_speakers(
     return segments
 
 
+def map_speakers_to_roles(
+    segments: list[TranscriptSegment], direction: str | None
+) -> list[TranscriptSegment]:
+    """Relabels diarization's neutral speaker_1/speaker_2 as agent/customer
+    using who speaks first, in place. On an inbound call the agent answers
+    and greets first; on an outbound call the customer picks up first. Only
+    applies when the call direction is known and exactly two speaker_N labels
+    are present - anything else (one voice, 3+ voices, channel-labeled
+    stereo, unlabeled) is left untouched. The UI offers a manual swap for
+    the cases where this heuristic guesses wrong."""
+    if direction not in ("inbound", "outbound"):
+        return segments
+
+    labels = {s.speaker for s in segments if s.speaker is not None}
+    if len(labels) != 2 or not all(label.startswith("speaker_") for label in labels):
+        return segments
+
+    first_speaker = min(
+        (s for s in segments if s.speaker is not None), key=lambda s: s.start
+    ).speaker
+    first_role = "agent" if direction == "inbound" else "customer"
+    other_role = "customer" if first_role == "agent" else "agent"
+
+    for segment in segments:
+        if segment.speaker is not None:
+            segment.speaker = first_role if segment.speaker == first_speaker else other_role
+    return segments
+
+
 class SherpaDiarizer:
     """Lazy wrapper around sherpa_onnx.OfflineSpeakerDiarization. Model files
     are looked up in settings.diarization_models_dir under fixed names

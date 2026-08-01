@@ -130,6 +130,45 @@ async def get_call_qa(
 
 
 @router.post(
+    "/{call_id}/transcript/swap-speakers",
+    response_model=TranscriptRead,
+    dependencies=[Depends(require_permission(CALLS_RETRY))],
+)
+async def swap_transcript_speakers(
+    call_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Manual fix for when the who-speaks-first heuristic (see
+    map_speakers_to_roles) guessed the roles wrong: swaps the two speaker
+    labels across all segments. Works on any two-speaker transcript."""
+    await _get_visible_call(call_id, db, user)
+
+    stmt = select(Transcript).where(Transcript.call_id == call_id)
+    result = await db.execute(stmt)
+    transcript = result.scalar_one_or_none()
+    if transcript is None:
+        raise HTTPException(status_code=404, detail="Transcript not found")
+
+    labels = {s.get("speaker") for s in transcript.segments if s.get("speaker")}
+    if len(labels) != 2:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Transcript does not have exactly two speakers (found {len(labels)})",
+        )
+
+    a, b = sorted(labels)
+    swap = {a: b, b: a}
+    # Reassign (not mutate) so SQLAlchemy sees the JSONB change.
+    transcript.segments = [
+        {**s, "speaker": swap.get(s.get("speaker"), s.get("speaker"))} for s in transcript.segments
+    ]
+    await db.commit()
+    await db.refresh(transcript)
+    return transcript
+
+
+@router.post(
     "/{call_id}/retry",
     response_model=CallRead,
     dependencies=[Depends(require_permission(CALLS_RETRY))],

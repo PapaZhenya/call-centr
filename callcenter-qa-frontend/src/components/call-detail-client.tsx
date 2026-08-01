@@ -4,7 +4,9 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { API_BASE_URL, ApiError, api, getAccessToken } from "@/lib/api-client";
+import { useAuth } from "@/lib/auth-context";
 import { speakerLabel } from "@/lib/format";
+import { CALLS_RETRY, hasPermission } from "@/lib/permissions";
 import type { Call, QAEvaluation, Transcript } from "@/lib/types";
 import { ru } from "@/messages/ru";
 
@@ -16,8 +18,10 @@ const SPEAKER_LABELS = {
 };
 
 export function CallDetailClient({ callId }: { callId: string }) {
+  const { user } = useAuth();
   const [call, setCall] = useState<Call | null>(null);
   const [transcript, setTranscript] = useState<Transcript | null>(null);
+  const [isSwapping, setIsSwapping] = useState(false);
   const [evaluation, setEvaluation] = useState<QAEvaluation | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -77,6 +81,26 @@ export function CallDetailClient({ callId }: { callId: string }) {
     }
   }
 
+  const speakerCount = new Set(
+    (transcript?.segments ?? []).map((s) => s.speaker).filter(Boolean),
+  ).size;
+  const canSwapSpeakers = hasPermission(user, CALLS_RETRY) && speakerCount === 2;
+
+  async function handleSwapSpeakers() {
+    setIsSwapping(true);
+    setError(null);
+    try {
+      const updated = await api.post<Transcript>(
+        `/api/v1/calls/${callId}/transcript/swap-speakers`,
+      );
+      setTranscript(updated);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : ru.common.error);
+    } finally {
+      setIsSwapping(false);
+    }
+  }
+
   return (
     <AppShell>
       <div className="stack">
@@ -92,7 +116,19 @@ export function CallDetailClient({ callId }: { callId: string }) {
 
         <div className="grid">
           <div className="card stack">
-            <h2>{ru.callDetail.transcript}</h2>
+            <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+              <h2 style={{ margin: 0 }}>{ru.callDetail.transcript}</h2>
+              {canSwapSpeakers && (
+                <button
+                  type="button"
+                  className="secondary"
+                  disabled={isSwapping}
+                  onClick={() => void handleSwapSpeakers()}
+                >
+                  {ru.callDetail.swapSpeakers}
+                </button>
+              )}
+            </div>
             {!transcript ? (
               <p className="muted">{ru.common.loading}</p>
             ) : (

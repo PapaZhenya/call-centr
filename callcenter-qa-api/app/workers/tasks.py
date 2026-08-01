@@ -16,6 +16,7 @@ from app.models.call import (
 )
 from app.models.transcript import Transcript
 from app.qa_evaluation.service import evaluate_call
+from app.transcription.diarization import map_speakers_to_roles
 from app.transcription.service import get_transcription_engine
 
 logger = logging.getLogger(__name__)
@@ -48,6 +49,8 @@ async def transcribe_call(ctx, call_id) -> None:
             call.status = STATUS_TRANSCRIPTION_FAILED
             await db.commit()
             raise
+
+        map_speakers_to_roles(result.segments, call.direction)
 
         db.add(
             Transcript(

@@ -63,6 +63,7 @@ export const ru = {
     speakerCustomer: "Клиент",
     speakerUnknown: "Неизвестно",
     speakerN: "Спикер {n}",
+    swapSpeakers: "Поменять спикеров местами",
   },
   rubric: {
     title: "Чек-лист оценки",
