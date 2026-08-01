@@ -126,6 +126,26 @@ export interface QAEvaluation {
   scores: QAEvaluationScore[];
 }
 
+export interface AgentSummary {
+  agent_id: string;
+  call_count: number;
+  average_score: number | null;
+}
+
+export interface ScoreByCriterion {
+  rubric_criterion_id: string;
+  key: string;
+  label: string;
+  average_score: number | null;
+  count: number;
+}
+
+export interface TrendPoint {
+  period: string;
+  average_score: number | null;
+  call_count: number;
+}
+
 export interface AnalyticsOverview {
   total_calls: number;
   average_score: number | null;

@@ -4,7 +4,13 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, type ReactNode } from "react";
 import { useAuth } from "@/lib/auth-context";
-import { TEAMS_MANAGE, USERS_MANAGE, hasPermission } from "@/lib/permissions";
+import {
+  ANALYTICS_VIEW_ALL,
+  ANALYTICS_VIEW_TEAM,
+  TEAMS_MANAGE,
+  USERS_MANAGE,
+  hasPermission,
+} from "@/lib/permissions";
 import { ru } from "@/messages/ru";
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -29,6 +35,9 @@ export function AppShell({ children }: { children: ReactNode }) {
           <Link href="/">{ru.nav.dashboard}</Link>
           <Link href="/calls">{ru.nav.calls}</Link>
           <Link href="/rubric">{ru.nav.rubric}</Link>
+          {(hasPermission(user, ANALYTICS_VIEW_ALL) || hasPermission(user, ANALYTICS_VIEW_TEAM)) && (
+            <Link href="/analytics">{ru.nav.analytics}</Link>
+          )}
           {hasPermission(user, USERS_MANAGE) && <Link href="/users">{ru.nav.users}</Link>}
           {hasPermission(user, TEAMS_MANAGE) && <Link href="/teams">{ru.nav.teams}</Link>}
         </nav>
