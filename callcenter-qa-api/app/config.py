@@ -38,6 +38,12 @@ class Settings(BaseSettings):
     local_llm_max_tokens: int = 4096
     local_llm_max_retries: int = 2
 
+    # A transcript with fewer words than this is scored at the minimum for
+    # every LLM criterion without calling the model at all (flag:
+    # insufficient_transcript). Silence, hold music, or a dropped call can't
+    # demonstrate quality - and shouldn't cost minutes of local LLM time.
+    qa_min_transcript_words: int = 20
+
     # When true (default), the app refuses to make HTTP requests to any host
     # that isn't localhost/127.0.0.1 or a bare Docker Compose service name -
     # see app/security/offline_guard.py. This is the guarantee that no audio,

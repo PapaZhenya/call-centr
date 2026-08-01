@@ -2,6 +2,7 @@ import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.llm.factory import get_llm_provider
 from app.models.call import Call
 from app.models.qa_evaluation import (
@@ -102,7 +103,29 @@ async def evaluate_call(
     notes: str | None = None
     model_flags: list[str] = []
 
-    if llm_criteria:
+    # Deterministic guard: near-empty speech can't demonstrate quality, and a
+    # local LLM asked to grade silence tends to hallucinate a decent call.
+    # Score every LLM criterion at the minimum and skip the model entirely.
+    insufficient = len(transcript_text.split()) < settings.qa_min_transcript_words
+    if insufficient and llm_criteria:
+        for criterion in llm_criteria:
+            db.add(
+                _build_score(
+                    evaluation.id,
+                    criterion,
+                    1.0,
+                    "Transcript contains too little speech to evaluate this criterion.",
+                    None,
+                    False,
+                    SOURCE_RULE,
+                    segments,
+                )
+            )
+            entries.append(ScoreEntry(1.0, float(criterion.weight), criterion.max_score, criterion.is_critical))
+        model_flags = ["insufficient_transcript"]
+        notes = "Call contains too little speech for QA evaluation."
+
+    if llm_criteria and not insufficient:
         schema = build_qa_schema(llm_criteria)
         system_prompt = build_system_prompt(llm_criteria)
         user_prompt = build_user_prompt(transcript_text)

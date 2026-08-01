@@ -8,7 +8,13 @@ from app.llm.base import LLMResult
 from app.models.qa_evaluation import SOURCE_LOCAL_LLM, STATUS_COMPLETED
 from app.qa_evaluation.service import evaluate_call
 
-TRANSCRIPT = "Agent: Hello and thank you for calling. Customer: Hi there."
+# Long enough to clear settings.qa_min_transcript_words - shorter transcripts
+# skip the LLM entirely (see the insufficient-transcript tests below).
+TRANSCRIPT = (
+    "Agent: Hello and thank you for calling our support line today. "
+    "Customer: Hi there, my internet stopped working this morning. "
+    "Agent: Let me check your line right away and get this resolved for you."
+)
 
 
 def _mock_db() -> MagicMock:
@@ -172,6 +178,62 @@ async def test_evaluate_call_critical_criterion_below_threshold_adds_flag():
         evaluation = await evaluate_call(db, call, TRANSCRIPT, segments=[])
 
     assert "critical_violation" in evaluation.flags
+
+
+@pytest.mark.asyncio
+async def test_evaluate_call_insufficient_transcript_skips_llm_and_scores_minimum():
+    politeness = _criterion("politeness", "Politeness")
+    resolution = _criterion("resolution", "Resolution")
+    rubric_version = _rubric_version([politeness, resolution])
+    call = SimpleNamespace(id=uuid.uuid4())
+
+    provider = AsyncMock()
+    db = _mock_db()
+
+    with (
+        patch(
+            "app.qa_evaluation.service.get_active_version",
+            AsyncMock(return_value=rubric_version),
+        ),
+        patch("app.qa_evaluation.service.get_llm_provider", return_value=provider),
+    ):
+        evaluation = await evaluate_call(db, call, "You", segments=[])
+
+    provider.generate_json.assert_not_called()  # silence never reaches the model
+    assert "insufficient_transcript" in evaluation.flags
+    assert evaluation.overall_score == 1.0  # every criterion at minimum
+
+    added = [c.args[0] for c in db.add.call_args_list if type(c.args[0]).__name__ == "QAEvaluationScore"]
+    assert len(added) == 2
+    assert all(s.score == 1.0 for s in added)
+
+
+@pytest.mark.asyncio
+async def test_evaluate_call_insufficient_transcript_still_runs_rule_criteria():
+    rule = _criterion("greeting", "Greeting")
+    rule.is_rule_based = True
+    rule.required_phrases = ["hello"]
+    rubric_version = _rubric_version([rule, _criterion("politeness", "Politeness")])
+    call = SimpleNamespace(id=uuid.uuid4())
+
+    provider = AsyncMock()
+    db = _mock_db()
+
+    with (
+        patch(
+            "app.qa_evaluation.service.get_active_version",
+            AsyncMock(return_value=rubric_version),
+        ),
+        patch("app.qa_evaluation.service.get_llm_provider", return_value=provider),
+    ):
+        evaluation = await evaluate_call(db, call, "Hello there", segments=[])
+
+    provider.generate_json.assert_not_called()
+    # Rule criterion scored on its own merits (phrase present -> max), the
+    # LLM criterion floored at 1 - the overall reflects both.
+    added = [c.args[0] for c in db.add.call_args_list if type(c.args[0]).__name__ == "QAEvaluationScore"]
+    assert len(added) == 2
+    assert "insufficient_transcript" in evaluation.flags
 
 
 @pytest.mark.asyncio
